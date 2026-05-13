@@ -1,0 +1,21 @@
+# Environment
+.env
+venv/
+
+# Database
+*.db
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Excel temp files
+~$*.xlsx

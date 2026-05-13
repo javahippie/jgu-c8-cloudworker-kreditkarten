@@ -1,0 +1,12 @@
+services:
+  worker:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - db-data:/app/data
+    environment:
+      - DB_PATH=/app/data/premiumkreditkarte.db
+
+volumes:
+  db-data:
