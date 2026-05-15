@@ -26,7 +26,7 @@ def create_worker() -> ZeebeWorker:
         cluster_id=os.environ["CAMUNDA_CLUSTER_ID"],
         region=os.getenv("CAMUNDA_REGION", "bru-2"),
     )
-    worker = ZeebeWorker(channel)
+    worker = ZeebeWorker(channel, request_timeout=30000)
 
     worker.task(task_type="validate-card")(workers.validate_card)
     worker.task(task_type="activate-card")(workers.activate_card)
