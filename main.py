@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 
+from grpc import aio as grpc_aio
 from dotenv import load_dotenv
 from pyzeebe import ZeebeWorker, create_camunda_cloud_channel
 
@@ -18,6 +19,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
+# pyzeebe loggt DEADLINE_EXCEEDED als WARNING wenn keine Jobs anstehen – das ist normal
+logging.getLogger("pyzeebe.worker.job_poller").setLevel(logging.ERROR)
+
+# gRPC-Keepalive: verhindert dass die Verbindung zu Camunda SaaS nach Inaktivität stirbt
+GRPC_OPTIONS = [
+    ("grpc.keepalive_time_ms", 60_000),          # Ping alle 60s
+    ("grpc.keepalive_timeout_ms", 10_000),        # 10s auf Pong warten
+    ("grpc.keepalive_permit_without_calls", 1),   # Auch pingen wenn keine Requests laufen
+    ("grpc.http2.max_pings_without_data", 0),     # Unbegrenzt Pings ohne Daten
+]
+
 
 def create_worker() -> ZeebeWorker:
     channel = create_camunda_cloud_channel(
@@ -25,6 +37,7 @@ def create_worker() -> ZeebeWorker:
         client_secret=os.environ["CAMUNDA_CLIENT_SECRET"],
         cluster_id=os.environ["CAMUNDA_CLUSTER_ID"],
         region=os.getenv("CAMUNDA_REGION", "bru-2"),
+        channel_options=GRPC_OPTIONS,
     )
     worker = ZeebeWorker(channel, request_timeout=30000)
 
