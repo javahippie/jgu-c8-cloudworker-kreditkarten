@@ -39,7 +39,12 @@ def create_worker() -> ZeebeWorker:
         region=os.getenv("CAMUNDA_REGION", "bru-2"),
         channel_options=GRPC_OPTIONS,
     )
-    worker = ZeebeWorker(channel, request_timeout=30000)
+    worker = ZeebeWorker(
+        channel,
+        request_timeout=30000,
+        max_connection_retries=-1,
+        stream_enabled=True,
+    )
 
     worker.task(task_type="validate-card")(workers.validate_card)
     worker.task(task_type="activate-card")(workers.activate_card)
