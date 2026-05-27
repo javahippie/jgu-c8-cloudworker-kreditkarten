@@ -9,7 +9,9 @@ from dotenv import load_dotenv
 from pyzeebe import ZeebeWorker, create_camunda_cloud_channel
 
 import db
+import db_bikes
 import workers
+import workers_bikes
 
 load_dotenv()
 
@@ -58,6 +60,14 @@ def create_worker() -> ZeebeWorker:
     worker.task(task_type="create-insurance-offer-by-kartennummer")(workers.create_insurance_offer_by_kartennummer)
     worker.task(task_type="activate-insurance")(workers.activate_insurance)
 
+    # Fahrradwerkstatt (Gruppe 1)
+    worker.task(task_type="bike-create-customer")(workers_bikes.create_customer)
+    worker.task(task_type="bike-register-bike")(workers_bikes.register_bike)
+    worker.task(task_type="bike-create-order")(workers_bikes.create_order)
+    worker.task(task_type="bike-update-order-status")(workers_bikes.update_order_status)
+    worker.task(task_type="bike-get-customer")(workers_bikes.get_customer)
+    worker.task(task_type="bike-get-order")(workers_bikes.get_order)
+
     return worker
 
 
@@ -65,6 +75,10 @@ async def main():
     db_path = os.getenv("DB_PATH", "premiumkreditkarte.db")
     db.init(db_path)
     logger.info("Datenbank initialisiert: %s", db_path)
+
+    bike_db_path = os.getenv("BIKE_DB_PATH", "fahrradwerkstatt.db")
+    db_bikes.init(bike_db_path)
+    logger.info("Fahrrad-Datenbank initialisiert: %s", bike_db_path)
 
     backoff = 1
     loop = asyncio.get_event_loop()
