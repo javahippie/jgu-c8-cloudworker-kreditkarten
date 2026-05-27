@@ -332,6 +332,103 @@ async def create_insurance_offer(
 
 
 # ──────────────────────────────────────────────
+# 7b. process-transaction-by-kartennummer
+# ──────────────────────────────────────────────
+
+async def process_transaction_by_kartennummer(
+    kartenNummer: str,
+    transactionAmount: float,
+    merchantName: str,
+    mccCode: str,
+    transactionDate: str,
+    **kwargs,
+) -> dict:
+    """Wie process_transaction, aber mit kartenNummer statt cardId als Schlüssel."""
+    card = db.get_card_by_number(kartenNummer)
+    if not card:
+        logger.warning("Transaktion für unbekannte Kartennummer %s", kartenNummer)
+        card_id = None
+        customer_id = None
+    else:
+        card_id = card["cardId"]
+        customer_id = card["customerId"]
+
+    rule = db.get_mcc_rule(mccCode)
+    if rule:
+        mcc_relevant = bool(rule["isRelevant"])
+        transaction_category = rule["transactionCategory"]
+        insurance_type = rule["insuranceType"]
+    else:
+        mcc_relevant = False
+        transaction_category = "OTHER"
+        insurance_type = "NONE"
+
+    reisekauf_erkannt = transaction_category == "TRAVEL"
+
+    transaction_id = db.next_transaction_id()
+    conn = db.get_conn()
+    conn.execute(
+        "INSERT INTO transactions (transactionId, cardId, customerId, transactionAmount, merchantName, mccCode, transactionDate, transactionSaved, mccRelevant, transactionCategory, insuranceType, reisekaufErkannt) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)",
+        (
+            transaction_id, card_id, customer_id, transactionAmount,
+            merchantName, mccCode, transactionDate, int(mcc_relevant),
+            transaction_category, insurance_type, int(reisekauf_erkannt),
+        ),
+    )
+    conn.commit()
+    conn.close()
+    logger.info("Transaktion %s für Karte %s gespeichert (MCC %s → %s)", transaction_id, kartenNummer, mccCode, transaction_category)
+    return {
+        "transactionId": transaction_id,
+        "kartenNummer": kartenNummer,
+        "mccRelevant": mcc_relevant,
+        "transactionCategory": transaction_category,
+        "insuranceType": insurance_type,
+        "reisekaufErkannt": reisekauf_erkannt,
+    }
+
+
+# ──────────────────────────────────────────────
+# 8b. create-insurance-offer-by-kartennummer
+# ──────────────────────────────────────────────
+
+async def create_insurance_offer_by_kartennummer(
+    kartenNummer: str,
+    transactionId: str,
+    insuranceType: str,
+    cvs: str = None,
+    ablaufDatum: str = None,
+    **kwargs,
+) -> dict:
+    """Wie create_insurance_offer, aber mit kartenNummer statt cardId als Schlüssel."""
+    card = db.get_card_by_number(kartenNummer)
+    if not card:
+        logger.warning("Versicherungsangebot für unbekannte Kartennummer %s", kartenNummer)
+        card_id = None
+        customer_id = None
+    else:
+        card_id = card["cardId"]
+        customer_id = card["customerId"]
+
+    contract_id = db.next_contract_id()
+    conn = db.get_conn()
+    conn.execute(
+        "INSERT INTO insurance (contractId, cardId, customerId, transactionId, cvs, ablaufDatum, offerStatus, insuranceStatus) "
+        "VALUES (?, ?, ?, ?, ?, ?, 'ANGEBOT_ERSTELLT', 'OFFEN')",
+        (contract_id, card_id, customer_id, transactionId, cvs, ablaufDatum),
+    )
+    conn.commit()
+    conn.close()
+    logger.info("Versicherungsangebot %s für Karte %s erstellt (%s)", contract_id, kartenNummer, insuranceType)
+    return {
+        "contractId": contract_id,
+        "kartenNummer": kartenNummer,
+        "offerStatus": "ANGEBOT_ERSTELLT",
+    }
+
+
+# ──────────────────────────────────────────────
 # 9. activate-insurance
 # ──────────────────────────────────────────────
 

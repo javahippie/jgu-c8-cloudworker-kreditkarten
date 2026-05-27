@@ -53,7 +53,9 @@ def create_worker() -> ZeebeWorker:
     worker.task(task_type="check-lock-status")(workers.check_lock_status)
     worker.task(task_type="send-mail")(workers.send_mail)
     worker.task(task_type="process-transaction")(workers.process_transaction)
+    worker.task(task_type="process-transaction-by-kartennummer")(workers.process_transaction_by_kartennummer)
     worker.task(task_type="create-insurance-offer")(workers.create_insurance_offer)
+    worker.task(task_type="create-insurance-offer-by-kartennummer")(workers.create_insurance_offer_by_kartennummer)
     worker.task(task_type="activate-insurance")(workers.activate_insurance)
 
     return worker

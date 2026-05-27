@@ -2,7 +2,9 @@
 
 ## Überblick
 
-Dieser Worker stellt **9 Service-Task-Handler** bereit, die über Camunda 8 SaaS angesprochen werden. Er verwaltet eine SQLite-Datenbank mit Kunden-, Karten-, Transaktions- und Versicherungsdaten.
+Dieser Worker stellt **11 Service-Task-Handler** bereit, die über Camunda 8 SaaS angesprochen werden. Er verwaltet eine SQLite-Datenbank mit Kunden-, Karten-, Transaktions- und Versicherungsdaten.
+
+> **Hinweis zur Schlüsselwahl:** `cardId` (z.B. `CARD001`) ist eine interne Datenbank-ID und sollte in BPMN-Prozessen **nicht** als Schlüssel verwendet werden. Für Transaktionsverarbeitung und Versicherungen stehen die Varianten `process-transaction-by-kartennummer` und `create-insurance-offer-by-kartennummer` zur Verfügung, die mit der fachlichen `kartenNummer` arbeiten. Die `-by-kartennummer`-Varianten sind für neue Prozesse zu bevorzugen.
 
 Der Worker pollt automatisch bei Camunda nach offenen Jobs. Sobald ein BPMN-Prozess einen Service Task mit passendem **Task Type** erreicht, übernimmt der Worker die Verarbeitung.
 
@@ -353,6 +355,63 @@ Erstellt ein Versicherungsangebot basierend auf einer versicherungsrelevanten Tr
 
 ---
 
+### 7b. `process-transaction-by-kartennummer`
+
+Identisch zu `process-transaction`, verwendet aber `kartenNummer` als fachlichen Schlüssel statt der internen `cardId`. **Empfohlen für neue BPMN-Prozesse.**
+
+**Task Type:** `process-transaction-by-kartennummer`
+
+**Input-Variablen:**
+
+| Variable            | Typ    | Beschreibung                       |
+|---------------------|--------|------------------------------------|
+| `kartenNummer`      | String | 16-stellige Kartennummer           |
+| `transactionAmount` | Number | Betrag der Transaktion             |
+| `merchantName`      | String | Name des Händlers                  |
+| `mccCode`           | String | MCC-Code des Händlers (z.B. `7011`) |
+| `transactionDate`   | String | Datum (`YYYY-MM-DD`)               |
+
+**Output-Variablen:**
+
+| Variable              | Typ     | Beschreibung                                    |
+|-----------------------|---------|-------------------------------------------------|
+| `transactionId`       | String  | ID der Transaktion (z.B. `TR001`)               |
+| `kartenNummer`        | String  | Kartennummer (für Folge-Tasks)                  |
+| `mccRelevant`         | Boolean | `true` wenn MCC-Code versicherungsrelevant      |
+| `transactionCategory` | String  | `TRAVEL`, `LUXURY` oder `OTHER`                 |
+| `insuranceType`       | String  | `REISEVERSICHERUNG`, `LUXUSGUETERVERSICHERUNG` oder `NONE` |
+| `reisekaufErkannt`    | Boolean | `true` bei Reise-Transaktionen                  |
+
+> Ist die Kartennummer unbekannt, wird die Transaktion trotzdem gespeichert (mit `cardId = NULL`) und eine Warnung geloggt. Die Verarbeitung bricht nicht ab.
+
+---
+
+### 8b. `create-insurance-offer-by-kartennummer`
+
+Identisch zu `create-insurance-offer`, verwendet aber `kartenNummer` als fachlichen Schlüssel. **Empfohlen für neue BPMN-Prozesse.**
+
+**Task Type:** `create-insurance-offer-by-kartennummer`
+
+**Input-Variablen:**
+
+| Variable        | Typ    | Pflicht | Beschreibung                              |
+|-----------------|--------|---------|-------------------------------------------|
+| `kartenNummer`  | String | Ja      | Kartennummer                              |
+| `transactionId` | String | Ja      | Transaktions-ID aus `process-transaction-by-kartennummer` |
+| `insuranceType` | String | Ja      | Versicherungstyp aus `process-transaction-by-kartennummer` |
+| `cvs`           | String | Nein    | Sicherheitscode der Karte                 |
+| `ablaufDatum`   | String | Nein    | Ablaufdatum der Karte (`YYYY-MM-DD`)      |
+
+**Output-Variablen:**
+
+| Variable       | Typ    | Beschreibung                      |
+|----------------|--------|-----------------------------------|
+| `contractId`   | String | Vertrags-ID (z.B. `CT001`)       |
+| `kartenNummer` | String | Kartennummer (für Folge-Tasks)    |
+| `offerStatus`  | String | `ANGEBOT_ERSTELLT`                |
+
+---
+
 ### 9. `activate-insurance`
 
 Aktiviert eine Versicherung mit einer kostenlosen 30-Tage-Testphase.
@@ -388,7 +447,17 @@ Start → validate-card → [Erfolg?]
                                         └─ Nein → Erneuter Versuch
 ```
 
-### Transaktionsverarbeitung mit Versicherung
+### Transaktionsverarbeitung mit Versicherung (empfohlen – mit Kartennummer)
+
+```
+Start → process-transaction-by-kartennummer → [mccRelevant?]
+                                                  ├─ Ja → create-insurance-offer-by-kartennummer → [Kunde interessiert?]
+                                                  │                                                   ├─ Ja → activate-insurance → send-mail → Ende
+                                                  │                                                   └─ Nein → Ende
+                                                  └─ Nein → Ende
+```
+
+### Transaktionsverarbeitung mit Versicherung (Legacy – mit cardId)
 
 ```
 Start → process-transaction → [mccRelevant?]
