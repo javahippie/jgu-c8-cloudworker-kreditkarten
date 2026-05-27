@@ -64,9 +64,21 @@ async def main():
     db.init(db_path)
     logger.info("Datenbank initialisiert: %s", db_path)
 
-    worker = create_worker()
-    logger.info("Worker gestartet – warte auf Jobs...")
-    await worker.work()
+    backoff = 1
+    loop = asyncio.get_event_loop()
+    while True:
+        started = loop.time()
+        try:
+            worker = create_worker()
+            logger.info("Worker gestartet – warte auf Jobs...")
+            await worker.work()
+            logger.warning("worker.work() ist beendet – Neustart in %ss", backoff)
+        except Exception:
+            logger.exception("Worker abgestürzt – Neustart in %ss", backoff)
+        if loop.time() - started > 60:
+            backoff = 1
+        await asyncio.sleep(backoff)
+        backoff = min(backoff * 2, 30)
 
 
 if __name__ == "__main__":
